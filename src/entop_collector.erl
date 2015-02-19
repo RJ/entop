@@ -19,6 +19,7 @@
 
 %% Module API
 -export([get_data/0]).
+-export([lookup_name/1]).
 
 %% =============================================================================
 %% Module API
@@ -34,7 +35,7 @@ get_data() ->
 		      {memory, erlang:memory([system, atom, atom_used, binary, code, ets])}
 		     ],
     Self = self(),
-    ProcessesProplist =  [ [ {pid,erlang:pid_to_list(P)} | process_info_items(P) ] ||
+    ProcessesProplist =  [ [ {pid,erlang:pid_to_list(P)}, {realpid, P}  | process_info_items(P) ] ||
 			     P <- erlang:processes(), P /= Self ],
 
     {ok, HeaderProplist, ProcessesProplist}.
@@ -49,3 +50,10 @@ process_info_items(P) ->
                             heap_size,
                             stack_size,
                             total_heap_size]).
+
+lookup_name(Pid) when is_pid(Pid) ->
+    {gproc, Props} = gproc:info(Pid, gproc),
+    case [ E || {E,_} <- Props, element(1,E)==n ] of
+        [] -> undefined;
+        [Ret] -> Ret
+    end.

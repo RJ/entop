@@ -38,13 +38,14 @@
 %% Module API
 %% =============================================================================
 init(Node) ->
+    ets:new(piddb, [set,named_table]),
     Columns = [{"Pid", 12, [{align, right}]},
-	       {"Registered Name", 20, []},
+	       {"Registered Name", 35, []},
 	       {"Reductions", 12, []},
-	       {"MQueue", 6, []},
-	       {"HSize", 6, []},
-	       {"SSize", 6, []},
-	       {"HTot", 6, []}],
+	       {"MQueue", 12, []},
+	       {"HSize", 10, []},
+	       {"SSize", 10, []},
+	       {"HTot", 10, []}],
     {ok, {Columns, 3}, #state{ node = Node }}.
 
 %% Header Callback
@@ -60,8 +61,8 @@ header(SystemInfo, State) ->
     RedTotal = element(2,proplists:get_value(reduction_count, SystemInfo)),
     PMemUsed = proplists:get_value(process_memory_used, SystemInfo),
     PMemTotal = proplists:get_value(process_memory_total, SystemInfo),
-    Row2 = io_lib:format("Processes: total ~p (RQ ~p) at ~p RpI using ~s (~s allocated)",
-			 [PTotal, RQueue, RedTotal, mem2str(PMemUsed), mem2str(PMemTotal)]),
+    Row2 = io_lib:format("Processes: total ~p (RQ ~p) at ~p RpI using ~s (~s allocated) namerpcs:~B",
+			 [PTotal, RQueue, RedTotal, mem2str(PMemUsed), mem2str(PMemTotal), ets:info(piddb,size)]),
 
     MemInfo = proplists:get_value(memory, SystemInfo),
     SystemMem = mem2str(proplists:get_value(system, MemInfo)),
@@ -75,17 +76,38 @@ header(SystemInfo, State) ->
     Row4 = "",
     {ok, [ lists:flatten(Row) || Row <- [Row1, Row2, Row3, Row4] ], State}.
 
+lookup_name(Props, State=#state{}) when is_list(Props) ->
+    case proplists:get_value(registered_name, Props) of
+        [] ->
+            Pid = proplists:get_value(realpid, Props),
+            case ets:lookup(piddb, Pid) of
+                [{Pid,Val}] -> Val;
+                [] ->
+                    Val = entop_net:lookup_name(State#state.node, entop_collector, Pid),
+                    ets:insert(piddb, {Pid, Val}),
+                    Val
+            end;
+        N ->
+            N
+    end.
+format_name(Name) ->
+    case Name of
+        []          -> "-";
+        undefined   -> "-";
+        Name when is_atom(Name) ->
+                       atom_to_list(Name);
+        {n,g,T}     -> lists:flatten(io_lib:format("g:~p",[T]));
+        {n,l,T}     -> lists:flatten(io_lib:format("l:~p",[T]));
+        Name        -> lists:flatten(io_lib:format("~p",[Name]))
+    end.
+
 %% Column Specific Callbacks
-row([{pid,_}|undefined], State) ->
+row([{pid,_},{realpid,_}|undefined], State) ->
     {ok, skip, State};
 row(ProcessInfo, State) ->
     Pid = proplists:get_value(pid, ProcessInfo),
-    RegName = case proplists:get_value(registered_name, ProcessInfo) of
-		  [] ->
-		      "-";
-		  Name ->
-		      atom_to_list(Name)
-	      end,
+    %% defer, only called if this row is rendered:
+    RegName = fun() -> format_name(lookup_name(ProcessInfo, State)) end,
     Reductions = proplists:get_value(reductions, ProcessInfo, 0),
     Queue = proplists:get_value(message_queue_len, ProcessInfo, 0),
     Heap = proplists:get_value(heap_size, ProcessInfo, 0),
