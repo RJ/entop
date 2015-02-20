@@ -43,6 +43,7 @@ init(Node) ->
 	       {"Registered Name", 35, []},
 	       {"Reductions", 12, []},
 	       {"MQueue", 12, []},
+           {"Memory", 15, []},
 	       {"HSize", 10, []},
 	       {"SSize", 10, []},
 	       {"HTot", 10, []}],
@@ -110,10 +111,11 @@ row(ProcessInfo, State) ->
     RegName = fun() -> format_name(lookup_name(ProcessInfo, State)) end,
     Reductions = proplists:get_value(reductions, ProcessInfo, 0),
     Queue = proplists:get_value(message_queue_len, ProcessInfo, 0),
+    Memory = proplists:get_value(memory, ProcessInfo, 0),
     Heap = proplists:get_value(heap_size, ProcessInfo, 0),
     Stack = proplists:get_value(stack_size, ProcessInfo, 0),
     HeapTot = proplists:get_value(total_heap_size, ProcessInfo, 0),
-    {ok, {Pid, RegName, Reductions, Queue, Heap, Stack, HeapTot}, State}.
+    {ok, {Pid, RegName, Reductions, Queue, Memory, Heap, Stack, HeapTot}, State}.
 
 mem2str(Mem) ->
     if Mem > ?GIB -> io_lib:format("~.1fm",[Mem/?MIB]);
